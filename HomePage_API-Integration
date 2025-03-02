@@ -1,0 +1,207 @@
+import CoreML
+import MapKit
+import SwiftUI
+
+struct FoodResource: Identifiable, Decodable {
+    let id = UUID()
+    let name: String
+    let latitude: Double
+    let longitude: Double
+    let address: String
+    let description: String
+    let phone: String
+    let webLink: String
+}
+
+struct HomePage: View {
+    
+    @State private var cameraPosition = MapCameraPosition.region(MKCoordinateRegion(
+        center: CLLocationCoordinate2D(latitude: 37.7749, longitude: -122.4194),
+        span: MKCoordinateSpan(latitudeDelta: 0.3, longitudeDelta: 0.3)))
+    
+    @State private var showHousing = true
+    @State private var showFood = true
+    @State private var showDeals = true
+    @State private var isFullScreen = false
+    @State private var selectedFoodResource: FoodResource?
+    
+    @State var preferred: String
+    @State var age: String
+    @State var emergencyShelter: Bool = false
+    @State var affordHouse: Bool = false
+    @State var foodBanks: Bool = false
+    @State var deals: Bool = false
+    @State var skillBuild: Bool = false
+    @State var scholarship: Bool = false
+    @State var mentorMatch: Bool = false
+    
+    @State private var foodResources: [FoodResource] = []
+    
+    @State public var sectionColor: Color = Color.defpurple
+    
+    var body: some View {
+        NavigationView {
+            ScrollView {
+                VStack {
+                    NavigationLink (destination: Profile(preferred: preferred)) {
+                        HStack {
+                            Image(systemName: "person").resizable().frame(width: 50.0, height: 50.0)
+                                .padding(10)
+                            Text(preferred).font(.system(size: 30)).padding(15)
+                        }.padding(5)
+                    }.background(Color.defpurple)
+                        .cornerRadius(15)
+                        .padding(5)
+                        
+                    
+                    if isFullScreen {
+                        fullScreenMap
+                    } else {
+                        mapView
+                    }
+                    
+                    HStack {
+                        Toggle("Housing", isOn: $showHousing)
+                            .padding()
+                        Toggle("Food Banks", isOn: $showFood)
+                    }.padding()
+                    
+                    VStack(spacing: 10) {
+                        NavigationLink(destination: HousingView()) {
+                            TabButton(icon: "house.fill", text: "Affordable Housing")
+                        }
+                        
+                        NavigationLink(destination: FoodDealsView()) {
+                            TabButton(icon: "cart.fill", text: "Food Deals")
+                        }
+                        
+                        NavigationLink(destination: EducationView()) {
+                            TabButton(icon: "book.fill", text: "Education")
+                        }
+                    }
+                    .padding(.top, 10)
+                    
+                }.background(Color.lightPurple)
+                    .scrollContentBackground(.hidden).navigationTitle("Uplift").navigationBarTitleTextColor(.white).foregroundColor(.white)
+            }
+        }.background(Color.lightPurple)
+            .onAppear {
+                fetchFoodResources { resources in
+                    self.foodResources = resources
+                }
+            }
+            .sheet(item: $selectedFoodResource) { resource in
+                FoodResourceDetailView(resource: resource)
+            }
+    }
+    
+    var mapView: some View {
+        Map(position: $cameraPosition) {
+            if showFood {
+                ForEach(foodResources) { resource in
+                    
+                    Annotation(resource.name, coordinate: CLLocationCoordinate2D(latitude: resource.latitude, longitude: resource.longitude)) {
+                        VStack {
+                            Image(systemName: "fork.knife.circle.fill")
+                                .resizable()
+                                .frame(width: 30, height: 30)
+                                .foregroundColor(.red)
+                            Text(resource.name)
+                                .font(.caption)
+                                .fixedSize(horizontal: true, vertical: false)
+                        }
+                        .onTapGesture {
+                            selectedFoodResource = resource
+                        }
+                    }
+                }
+            }
+        }
+        .frame(height: 300)
+        .cornerRadius(15)
+        .padding()
+        .onTapGesture {
+            isFullScreen.toggle()
+        }
+    }
+     
+     var fullScreenMap: some View {
+         mapView
+             .edgesIgnoringSafeArea(.all)
+             .onTapGesture {
+                 isFullScreen.toggle()
+             }
+     }
+
+}
+
+struct TabButton: View {
+    var icon: String
+    var text: String
+    
+    var body: some View {
+        HStack {
+            Image(systemName: icon)
+                .resizable()
+                .frame(width: 30, height: 30)
+                .foregroundColor(.white)
+            Text(text)
+                .font(.headline)
+                .foregroundColor(.white)
+        }
+        .frame(width: 250, height: 50)
+        .background(Color.defpurple)
+        .cornerRadius(15)
+    }
+}
+
+struct FoodResourceDetailView: View {
+    let resource: FoodResource
+    
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(resource.name)
+                .font(.largeTitle)
+                .bold()
+            Text("Address: \(resource.address)")
+            Text("Phone: \(resource.phone)")
+            Text("Description: \(resource.description)")
+            Link("Visit Website", destination: URL(string: resource.webLink)!)
+        }
+        .padding()
+    }
+}
+
+
+func fetchFoodResources(completion: @escaping ([FoodResource]) -> Void) {
+    guard let url = URL(string: "https://controllerdata.lacity.org/resource/v2mg-qsxf.json") else {
+        print("Invalid URL")
+        return
+    }
+
+    URLSession.shared.dataTask(with: url) { data, response, error in
+        if let error = error {
+            print("Error fetching data: \(error.localizedDescription)")
+            return
+        }
+        
+        guard let data = data else {
+            print("No data received")
+            return
+        }
+
+        do {
+            let decoder = JSONDecoder()
+            let foodResources = try decoder.decode([FoodResource].self, from: data)
+            DispatchQueue.main.async {
+                completion(foodResources)
+            }
+        } catch {
+            print("Error decoding JSON: \(error.localizedDescription)")
+        }
+    }.resume()
+}
+
+#Preview {
+    HomePage(preferred: "preview", age: "0-12")
+}
